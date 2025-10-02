@@ -10,6 +10,7 @@ import torch.optim as optim
 import time
 import numpy as np
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
+from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS 
 import random
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -23,13 +24,14 @@ def get_config():
         
         #"net": AlexNet, "net_print": "AlexNet",
         #"net":ResNet, "net_print": "ResNet",
-        "net": VisionTransformer, "net_print": "ViT-B_32", "model_type": "ViT-B_32", "pretrained_dir": "pretrainedVIT/ViT-B_32.npz",
+        # "net": VisionTransformer, "net_print": "ViT-B_32", "model_type": "ViT-B_32", "pretrained_dir": "pretrainedVIT/ViT-B_32.npz",
+        "net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16", "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
         #"net": VisionTransformer, "net_print": "ViT-B_16", "model_type": "ViT-B_16", "pretrained_dir": "pretrainedVIT/ViT-B_16.npz",
         
         "bit_list": [64,32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
-        "epoch": 150, "test_map": 30, "batch_size": 32, "resize_size": 256, "crop_size": 224,
+        "epoch": 10, "test_map": 30, "batch_size": 32, "resize_size": 256, "crop_size": 224,
         "info": "HashNet", "alpha": 0.1, "step_continuation": 20,
     }
     config = config_dataset(config)
@@ -48,6 +50,13 @@ def train_val(config, bit):
     if "ViT" in config["net_print"]:
         vit_config = VIT_CONFIGS[config["model_type"]]
         net = config["net"](vit_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    
+    # ADDED: Logic for VisionMambaHashing
+    elif "ViM" in config["net_print"]:
+        vim_config = VIM_CONFIGS[config["model_type"]] 
+        net = config["net"](vim_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    # END ADDED
+        
     else:
         net = config["net"](bit).to(device)
     
@@ -58,16 +67,19 @@ def train_val(config, bit):
     results_path = os.path.join(config["save_path"], config["dataset"] + "_" + config["info"] + "_" + config["net_print"] + "_Bit" + str(bit) + ".txt")
     f = open(results_path, 'a')
     
+
     if os.path.exists(trained_path):
-        print('==> Resuming from checkpoint..')
-        checkpoint = torch.load(trained_path)
-        net.load_state_dict(checkpoint['net'])
-        Best_mAP = checkpoint['Best_mAP']
-        start_epoch = checkpoint['epoch'] + 1
+      # ... loading checkpoint ...
+      print('==> Resuming from checkpoint..')
+      checkpoint = torch.load(trained_path)
+      net.load_state_dict(checkpoint['net'])
+      Best_mAP = checkpoint['Best_mAP']
+      start_epoch = checkpoint['epoch'] + 1      
     else:
-        if "ViT" in config["net_print"]:
-            print('==> Loading from pretrained model..')
-            net.load_from(np.load(config["pretrained_dir"]))
+      # MODIFIED: Update logic for pretrained loading to include "ViM"
+      if "ViT" in config["net_print"] or "ViM" in config["net_print"]:
+        print('==> Loading from pretrained model..')
+        net.load_from(np.load(config["pretrained_dir"]))
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = HashNetLoss(config, bit)

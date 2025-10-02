@@ -10,6 +10,7 @@ import torch.optim as optim
 import time
 import numpy as np
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
+from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS # ADDED: ViM imports
 import random
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -24,6 +25,7 @@ def get_config():
         #"net": AlexNet, "net_print": "AlexNet",
         #"net":ResNet, "net_print": "ResNet",
         "net": VisionTransformer, "net_print": "ViT-B_32", "model_type": "ViT-B_32", "pretrained_dir": "pretrainedVIT/ViT-B_32.npz",
+        #"net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16", "pretrained_dir": "pretrainedVIM/ViM-T_16.npz", # ADDED: ViM config
         #"net": VisionTransformer, "net_print": "ViT-B_16", "model_type": "ViT-B_16", "pretrained_dir": "pretrainedVIT/ViT-B_16.npz",
         
         "bit_list": [64,32],
@@ -48,6 +50,11 @@ def train_val(config, bit):
     if "ViT" in config["net_print"]:
         vit_config = VIT_CONFIGS[config["model_type"]]
         net = config["net"](vit_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    # ADDED: Logic for VisionMambaHashing
+    elif "ViM" in config["net_print"]:
+        vim_config = VIM_CONFIGS[config["model_type"]] 
+        net = config["net"](vim_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    # END ADDED
     else:
         net = config["net"](bit).to(device)
     
@@ -56,7 +63,9 @@ def train_val(config, bit):
     best_path = os.path.join(config["save_path"], config["dataset"] + "_" + config["info"] + "_" + config["net_print"] + "_Bit" + str(bit) + "-BestModel.pt")
     trained_path = os.path.join(config["save_path"], config["dataset"] + "_" + config["info"] + "_" + config["net_print"] + "_Bit" + str(bit) + "-IntermediateModel.pt")
     results_path = os.path.join(config["save_path"], config["dataset"] + "_" + config["info"] + "_" + config["net_print"] + "_Bit" + str(bit) + ".txt")
+    f = open(results_path, 'a') # Open file here for all writes in the loop
     
+    # MODIFIED: Checkpoint loading logic adjusted to match HashNet for initial pretrained loading
     if os.path.exists(trained_path):
         print('==> Resuming from checkpoint..')
         checkpoint = torch.load(trained_path)
@@ -64,7 +73,8 @@ def train_val(config, bit):
         Best_mAP = checkpoint['Best_mAP']
         start_epoch = checkpoint['epoch'] + 1
     else:
-        if "ViT" in config["net_print"]:
+        # MODIFIED: Update logic for pretrained loading to include "ViM"
+        if "ViT" in config["net_print"] or "ViM" in config["net_print"]:
             print('==> Loading from pretrained model..')
             net.load_from(np.load(config["pretrained_dir"]))
     
@@ -89,7 +99,6 @@ def train_val(config, bit):
         train_loss = train_loss / len(train_loader)
 
         print("\b\b\b\b\b\b\b loss:%.3f" % (train_loss))
-        f = open(results_path, 'a')
         f.write('Train | Epoch: %d | Loss: %.3f\n' % (epoch, train_loss))
 
         if (epoch) % config["test_map"] == 0:
@@ -124,14 +133,14 @@ def train_val(config, bit):
             f.write('Test | Epoch %d | MAP: %.3f | Best MAP: %.3f\n'
                 % (epoch, mAP, Best_mAP))
             print(config)
-            f.close() 
             
             state = {
-            	'net': net.state_dict(),
-            	'Best_mAP': Best_mAP,
-            	'epoch': epoch,
+                'net': net.state_dict(),
+                'Best_mAP': Best_mAP,
+                'epoch': epoch,
             }
             torch.save(state, trained_path)
+    f.close() # Close file outside the loop after all epochs are done
 
 class GreedyHashLoss(torch.nn.Module):
     def __init__(self, config, bit):
@@ -156,7 +165,7 @@ class GreedyHashLoss(torch.nn.Module):
 
         @staticmethod
         def backward(ctx, grad_output):
-            # input,  = ctx.saved_tensors
+            # input,  = ctx.saved_tensors
             # grad_output = grad_output.data
             return grad_output
 
@@ -166,4 +175,3 @@ if __name__ == "__main__":
     print(config)
     for bit in config["bit_list"]:
         train_val(config, bit)
-

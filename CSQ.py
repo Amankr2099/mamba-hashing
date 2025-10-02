@@ -5,6 +5,7 @@
 from utils.tools import *
 from network import *
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
+from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS # ADDED: ViM imports
 import argparse
 import os
 import random
@@ -26,6 +27,7 @@ def get_config():
         #"net": AlexNet, "net_print": "AlexNet",
         #"net":ResNet, "net_print": "ResNet",
         "net": VisionTransformer, "net_print": "ViT-B_32", "model_type": "ViT-B_32", "pretrained_dir": "pretrainedVIT/ViT-B_32.npz",
+        #"net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16", "pretrained_dir": "pretrainedVIM/ViM-T_16.npz", # ADDED: ViM config
         #"net": VisionTransformer, "net_print": "ViT-B_16", "model_type": "ViT-B_16", "pretrained_dir": "pretrainedVIT/ViT-B_16.npz",
         
         "bit_list": [16],
@@ -36,7 +38,6 @@ def get_config():
     }
     config = config_dataset(config)
     return config
-
 
 
 def train_val(config, bit):
@@ -52,6 +53,11 @@ def train_val(config, bit):
     if "ViT" in config["net_print"]:
         vit_config = VIT_CONFIGS[config["model_type"]]
         net = config["net"](vit_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    # ADDED: Logic for VisionMambaHashing
+    elif "ViM" in config["net_print"]:
+        vim_config = VIM_CONFIGS[config["model_type"]] 
+        net = config["net"](vim_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
+    # END ADDED
     else:
         net = config["net"](bit).to(device)
     
@@ -69,7 +75,8 @@ def train_val(config, bit):
         Best_mAP = checkpoint['Best_mAP']
         start_epoch = checkpoint['epoch'] + 1
     else:
-        if "ViT" in config["net_print"]:
+        # MODIFIED: Update logic for pretrained loading to include "ViM"
+        if "ViT" in config["net_print"] or "ViM" in config["net_print"]:
             print('==> Loading from pretrained model..')
             net.load_from(np.load(config["pretrained_dir"]))
     
@@ -130,19 +137,12 @@ def train_val(config, bit):
             print(config)
 
             state = {
-            	'net': net.state_dict(),
-            	'Best_mAP': Best_mAP,
-            	'epoch': epoch,
+                'net': net.state_dict(),
+                'Best_mAP': Best_mAP,
+                'epoch': epoch,
             }
             torch.save(state, trained_path)
-        '''state = {
-            'net': net.state_dict(),
-            'Best_mAP': Best_mAP,
-            'epoch': epoch,
-        }
-        torch.save(state, trained_path)'''
     f.close()
-
 
 
 class CSQLoss(torch.nn.Module):
@@ -187,7 +187,7 @@ class CSQLoss(torch.nn.Module):
                     sa = random.sample(list(range(bit)), bit // 2)
                     ones[sa] = -1
                     hash_targets[index] = ones
-                # to find average/min  pairwise distance
+                # to find average/min  pairwise distance
                 c = []
                 for i in range(n_class):
                     for j in range(n_class):
@@ -198,7 +198,7 @@ class CSQLoss(torch.nn.Module):
 
                 # choose min(c) in the range of K/4 to K/3
                 # see in https://github.com/yuanli2333/Hadamard-Matrix-for-hashing/issues/1
-                # but it is hard when bit is  small
+                # but it is hard when bit is  small
                 if c.min() > bit / 4 and c.mean() >= bit / 2:
                     print(c.min(), c.mean())
                     break
@@ -210,4 +210,3 @@ if __name__ == "__main__":
     print(config)
     for bit in config["bit_list"]:
         train_val(config, bit)
-

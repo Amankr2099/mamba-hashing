@@ -1,10 +1,17 @@
 import torch.nn as nn
 import numpy as np
 
-# Adjust this import path based on where you place your Vision Mamba code 
-# in the Colab environment.
-# Current path based on uploaded files:
-from Vim.vim.models_mamba import VisionMamba
+import os
+import sys
+VIM_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Vim', 'vim'))
+
+# 2. Add this path to the Python system path (sys.path).
+if VIM_SRC_DIR not in sys.path:
+    sys.path.insert(0, VIM_SRC_DIR)
+
+from models_mamba import VisionMamba
+
+# from Vim.vim.models_mamba import VisionMamba
 
 # Configuration mapping for different Vision Mamba variants
 # (Similar to how your repo uses VIT_CONFIGS)

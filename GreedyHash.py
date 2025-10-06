@@ -26,7 +26,7 @@ def get_config():
         # "net": VisionMambaHashing, "net_print": "ViM-S_16", "model_type": "ViM-S_16", "pretrained_dir": "pretrainedVIM/ViM-S_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-B_16", "model_type": "ViM-B_16", "pretrained_dir": "pretrainedVIM/ViM-B_16.npz",
       
-        "bit_list": [64,32],
+        "bit_list": [16,32],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 100, "test_map": 20, "batch_size": 32, "resize_size": 256, "crop_size": 224,

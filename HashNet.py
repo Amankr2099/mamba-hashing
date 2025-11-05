@@ -9,6 +9,7 @@ import torch
 import torch.optim as optim
 import time
 import numpy as np
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
 from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS 
 import random
@@ -32,7 +33,7 @@ def get_config():
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 150, "test_map": 30, "batch_size": 64, "resize_size": 256, "crop_size": 224,
-        "info": "HashNet", "alpha": 0.1, "step_continuation": 20,
+        "info": "HashNet", "alpha": 0.2, "step_continuation": 20,
     }
     config = config_dataset(config)
     return config
@@ -83,6 +84,8 @@ def train_val(config, bit):
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = HashNetLoss(config, bit)
+    # Add this line right after it:
+    scheduler = CosineAnnealingLR(optimizer, T_max=config["epoch"], eta_min=1e-7)
 
     for epoch in range(start_epoch, config["epoch"]+1):
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
@@ -103,7 +106,9 @@ def train_val(config, bit):
 
         print("\b\b\b\b\b\b\b loss:%.3f" % (train_loss))
         f.write('Train | Epoch: %d | Loss: %.3f\n' % (epoch, train_loss))
+        scheduler.step()
 
+        
         if (epoch) % config["test_map"] == 0:
             # print("calculating test binary code......")
             tst_binary, tst_label = compute_result(test_loader, net, device=device)

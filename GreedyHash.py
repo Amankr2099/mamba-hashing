@@ -28,11 +28,18 @@ def get_config():
         # "net": VisionMambaHashing, "net_print": "ViM-S_16", "model_type": "ViM-S_16", "pretrained_dir": "pretrainedVIM/ViM-S_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-B_16", "model_type": "ViM-B_16", "pretrained_dir": "pretrainedVIM/ViM-B_16.npz",
       
-        "bit_list": [64,16,32],
-        "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
+        "bit_list": [64,32,16],
+        # "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 150, "test_map": 30, "batch_size": 64, "resize_size": 256, "crop_size": 224,
-        "info": "GreedyHash", "alpha": 0.2,
+        "info": "GreedyHash", "alpha": 0.1,
+        "optimizer": {
+            "type": optim.AdamW,  # AdamW often works better
+            "optim_params": {
+                "lr": 3e-5,  # Try different LR
+                "weight_decay": 0.05  # Add regularization
+            }
+        },
     }
     config = config_dataset(config)
     return config
@@ -81,7 +88,7 @@ def train_val(config, bit):
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = GreedyHashLoss(config, bit)
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=config["epoch"], eta_min=1e-7)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=config["epoch"], eta_min=1e-7)
 
     for epoch in range(start_epoch, config["epoch"]+1):
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
@@ -102,7 +109,7 @@ def train_val(config, bit):
 
         print("\b\b\b\b\b\b\b loss:%.3f" % (train_loss))
         f.write('Train | Epoch: %d | Loss: %.3f\n' % (epoch, train_loss))
-        scheduler.step()
+        # scheduler.step()
 
 
         if (epoch) % config["test_map"] == 0:

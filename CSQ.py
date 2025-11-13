@@ -31,8 +31,8 @@ def get_config():
         "bit_list": [32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
-        "epoch": 100, "test_map": 20, "batch_size": 32, "resize_size": 256, "crop_size": 224,
-        "info": "CSQ", "lambda": 0.0001,
+        "epoch": 150, "test_map": 30, "batch_size": 32, "resize_size": 256, "crop_size": 224,
+        "info": "CSQ", "lambda": 0.001,
     }
     config = config_dataset(config)
     return config

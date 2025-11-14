@@ -33,13 +33,6 @@ def get_config():
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 150, "test_map": 30, "batch_size": 64, "resize_size": 256, "crop_size": 224,
         "info": "GreedyHash", "alpha": 0.1,
-        "optimizer": {
-            "type": optim.AdamW,  # AdamW often works better
-            "optim_params": {
-                "lr": 3e-5,  # Try different LR
-                "weight_decay": 0.05  # Add regularization
-            }
-        },
     }
     config = config_dataset(config)
     return config

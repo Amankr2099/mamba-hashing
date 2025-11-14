@@ -79,7 +79,7 @@ class VisionMambaHashing(nn.Module):
         if len(features.shape) == 3:
             features = features.mean(dim=1)  # Global average pooling
 
-        features = nn.functional.normalize(features, p=2, dim=1)
+        # features = nn.functional.normalize(features, p=2, dim=1)
         
         # Apply hash layer
         logits = self.hash_layer(features)

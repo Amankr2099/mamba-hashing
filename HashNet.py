@@ -30,14 +30,7 @@ def get_config():
 
         
         "bit_list": [64,32,16],
-        # "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
-        "optimizer": {
-            "type": optim.AdamW,  # AdamW often works better
-            "optim_params": {
-                "lr": 3e-5,  # Try different LR
-                "weight_decay": 0.05  # Add regularization
-            }
-        },
+        "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 150, "test_map": 30, "batch_size": 64, "resize_size": 256, "crop_size": 224,
         "info": "HashNet", "alpha": 0.1, "step_continuation": 20,

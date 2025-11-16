@@ -34,6 +34,7 @@ class VisionMambaHashing(nn.Module):
         self.model = VisionMamba(
             img_size=crop_size,
             patch_size=16, 
+            stride=8,
             embed_dim=embed_dim,
             depth=depth,
             rms_norm=True, 
@@ -76,10 +77,11 @@ class VisionMambaHashing(nn.Module):
         
         # If features are pooled (batch_size, embed_dim), use directly
         # If features include sequence (batch_size, num_patches, embed_dim), pool them
-        if len(features.shape) == 3:
-            features = features.mean(dim=1)  # Global average pooling
+        # if len(features.shape) == 3:
+        #     features = features.mean(dim=1)  # Global average pooling
 
-        # features = nn.functional.normalize(features, p=2, dim=1)
+        features = nn.functional.normalize(features, p=2, dim=1)
+        
         
         # Apply hash layer
         logits = self.hash_layer(features)

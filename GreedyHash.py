@@ -58,11 +58,7 @@ def train_val(config, bit):
     else:
         net = config["net"](bit).to(device)
     
-    # <--- INSERT THIS CODE BLOCK --->
-    if torch.cuda.device_count() > 1:
-        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
-        net = torch.nn.DataParallel(net)
-    # <--- END INSERT --->
+
     
     if not os.path.exists(config["save_path"]):
         os.makedirs(config["save_path"])
@@ -83,6 +79,12 @@ def train_val(config, bit):
         if "ViT" in config["net_print"] or "ViM" in config["net_print"]:
             print('==> Loading from pretrained model..')
             net.load_from(np.load(config["pretrained_dir"]))
+
+        # <--- INSERT THIS CODE BLOCK --->
+    if torch.cuda.device_count() > 1:
+        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
+        net = torch.nn.DataParallel(net)
+    # <--- END INSERT --->
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = GreedyHashLoss(config, bit)

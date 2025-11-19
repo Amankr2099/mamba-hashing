@@ -61,11 +61,7 @@ def train_val(config, bit):
     else:
         net = config["net"](bit).to(device)
 
-        # <--- INSERT THIS CODE BLOCK --->
-    if torch.cuda.device_count() > 1:
-        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
-        net = torch.nn.DataParallel(net)
-    # <--- END INSERT --->
+
     
     if not os.path.exists(config["save_path"]):
         os.makedirs(config["save_path"])
@@ -87,11 +83,17 @@ def train_val(config, bit):
       if "ViT" in config["net_print"] or "ViM" in config["net_print"]:
         print('==> Loading from pretrained model..')
         net.load_from(np.load(config["pretrained_dir"]))
+
+            # <--- INSERT THIS CODE BLOCK --->
+    if torch.cuda.device_count() > 1:
+        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
+        net = torch.nn.DataParallel(net)
+    # <--- END INSERT --->
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = HashNetLoss(config, bit)
     # Add this line right after it:
-    scheduler = CosineAnnealingLR(optimizer, T_max=config["epoch"], eta_min=1e-7)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=config["epoch"], eta_min=1e-7)
 
     for epoch in range(start_epoch, config["epoch"]+1):
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
@@ -112,7 +114,7 @@ def train_val(config, bit):
 
         print("\b\b\b\b\b\b\b loss:%.3f" % (train_loss))
         f.write('Train | Epoch: %d | Loss: %.3f\n' % (epoch, train_loss))
-        scheduler.step()
+        # scheduler.step()
 
         
         if (epoch) % config["test_map"] == 0:
@@ -148,6 +150,7 @@ def train_val(config, bit):
                 'epoch': epoch,
                  }
                 torch.save(state, best_path)
+                
                 
             print("%s epoch:%d, bit:%d, dataset:%s, MAP:%.3f, Best MAP: %.3f" % (
                 config["info"], epoch, bit, config["dataset"], mAP, Best_mAP))

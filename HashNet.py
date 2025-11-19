@@ -32,7 +32,7 @@ def get_config():
         "bit_list": [64,32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
-        "epoch": 200, "test_map": 50, "batch_size": 32, "resize_size": 256, "crop_size": 224,
+        "epoch": 200, "test_map": 50, "batch_size": 64, "resize_size": 256, "crop_size": 224,
         "info": "HashNet", "alpha": 0.1, "step_continuation": 20,
     }
     config = config_dataset(config)

@@ -31,7 +31,7 @@ def get_config():
         "bit_list": [64,32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
-        "epoch": 200, "test_map": 50, "batch_size": 32, "resize_size": 256, "crop_size": 224,
+        "epoch": 200, "test_map": 50, "batch_size": 64, "resize_size": 256, "crop_size": 224,
         "info": "GreedyHash", "alpha": 0.1,
     }
     config = config_dataset(config)
@@ -57,6 +57,12 @@ def train_val(config, bit):
     # END ADDED
     else:
         net = config["net"](bit).to(device)
+    
+    # <--- INSERT THIS CODE BLOCK --->
+    if torch.cuda.device_count() > 1:
+        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
+        net = torch.nn.DataParallel(net)
+    # <--- END INSERT --->
     
     if not os.path.exists(config["save_path"]):
         os.makedirs(config["save_path"])
@@ -126,23 +132,35 @@ def train_val(config, bit):
                 f.write('\n')
             
                 print("Saving in ", config["save_path"])
+                # state = {
+                #     'net': net.state_dict(),
+                #     'Best_mAP': Best_mAP,
+                #     'epoch': epoch,
+                # }
+                # torch.save(state, best_path)
                 state = {
-                    'net': net.state_dict(),
-                    'Best_mAP': Best_mAP,
-                    'epoch': epoch,
+                'net': net.module.state_dict() if isinstance(net, torch.nn.DataParallel) else net.state_dict(), # <--- UPDATED
+                'Best_mAP': Best_mAP,
+                'epoch': epoch,
                 }
-                torch.save(state, best_path)
+                torch.save(state, trained_path)
             print("%s epoch:%d, bit:%d, dataset:%s, MAP:%.3f, Best MAP: %.3f" % (
                 config["info"], epoch, bit, config["dataset"], mAP, Best_mAP))
             f.write('Test | Epoch %d | MAP: %.3f | Best MAP: %.3f\n'
                 % (epoch, mAP, Best_mAP))
             print(config)
             
+            # state = {
+            #     'net': net.state_dict(),
+            #     'Best_mAP': Best_mAP,
+            #     'epoch': epoch,
+            # }
             state = {
-                'net': net.state_dict(),
-                'Best_mAP': Best_mAP,
-                'epoch': epoch,
-            }
+                    # Check if wrapped in DataParallel and save the inner module
+                    'net': net.module.state_dict() if isinstance(net, torch.nn.DataParallel) else net.state_dict(),
+                    'Best_mAP': Best_mAP,
+                    'epoch': epoch,
+                }
             torch.save(state, trained_path)
     f.close() # Close file outside the loop after all epochs are done
 

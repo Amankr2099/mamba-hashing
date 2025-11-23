@@ -155,7 +155,7 @@ class VisionMambaHashing(nn.Module):
         self.model = VisionMamba(
             img_size=crop_size,
             patch_size=16, 
-            stride=16, 
+            stride=8, 
             embed_dim=embed_dim,
             depth=depth,
             rms_norm=True, 

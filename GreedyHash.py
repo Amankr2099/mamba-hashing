@@ -24,7 +24,10 @@ def get_config():
         #"dataset": "nuswide_21",
         # "dataset": "imagenet",
         
-        "net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16", "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
+        "net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16",
+        "pretrained_dir": "pretrainedVIM/vim_t_midclstok_ft_78p3acc.pth",
+
+        # "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-S_16", "model_type": "ViM-S_16", "pretrained_dir": "pretrainedVIM/ViM-S_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-B_16", "model_type": "ViM-B_16", "pretrained_dir": "pretrainedVIM/ViM-B_16.npz",
       
@@ -80,11 +83,6 @@ def train_val(config, bit):
             print('==> Loading from pretrained model..')
             net.load_from(np.load(config["pretrained_dir"]))
 
-        # <--- INSERT THIS CODE BLOCK --->
-    if torch.cuda.device_count() > 1:
-        print(f"==> Let's use {torch.cuda.device_count()} GPUs!")
-        net = torch.nn.DataParallel(net)
-    # <--- END INSERT --->
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
     criterion = GreedyHashLoss(config, bit)
@@ -134,35 +132,23 @@ def train_val(config, bit):
                 f.write('\n')
             
                 print("Saving in ", config["save_path"])
-                # state = {
-                #     'net': net.state_dict(),
-                #     'Best_mAP': Best_mAP,
-                #     'epoch': epoch,
-                # }
-                # torch.save(state, best_path)
                 state = {
-                'net': net.module.state_dict() if isinstance(net, torch.nn.DataParallel) else net.state_dict(), # <--- UPDATED
-                'Best_mAP': Best_mAP,
-                'epoch': epoch,
+                    'net': net.state_dict(),
+                    'Best_mAP': Best_mAP,
+                    'epoch': epoch,
                 }
-                torch.save(state, trained_path)
+                torch.save(state, best_path)
             print("%s epoch:%d, bit:%d, dataset:%s, MAP:%.3f, Best MAP: %.3f" % (
                 config["info"], epoch, bit, config["dataset"], mAP, Best_mAP))
             f.write('Test | Epoch %d | MAP: %.3f | Best MAP: %.3f\n'
                 % (epoch, mAP, Best_mAP))
             print(config)
             
-            # state = {
-            #     'net': net.state_dict(),
-            #     'Best_mAP': Best_mAP,
-            #     'epoch': epoch,
-            # }
             state = {
-                    # Check if wrapped in DataParallel and save the inner module
-                    'net': net.module.state_dict() if isinstance(net, torch.nn.DataParallel) else net.state_dict(),
-                    'Best_mAP': Best_mAP,
-                    'epoch': epoch,
-                }
+                'net': net.state_dict(),
+                'Best_mAP': Best_mAP,
+                'epoch': epoch,
+            }
             torch.save(state, trained_path)
     f.close() # Close file outside the loop after all epochs are done
 

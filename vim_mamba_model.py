@@ -213,8 +213,10 @@ class VisionMambaHashing(nn.Module):
             return
 
         if weights_path.endswith('.pth') or weights_path.endswith('.pt'):
-            # Standard PyTorch Checkpoint Loading (Recommended for Vim)
-            checkpoint = torch.load(weights_path, map_location='cpu')
+            # Standard PyTorch Checkpoint Loading
+            # FIXED: Added weights_only=False to resolve PyTorch 2.6+ UnpicklingError
+            checkpoint = torch.load(weights_path, map_location='cpu', weights_only=False)
+            
             state_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
             
             # Filter out head keys if they exist in checkpoint

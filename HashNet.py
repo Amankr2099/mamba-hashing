@@ -24,8 +24,8 @@ def get_config():
         # "dataset": "imagenet",
         
         "net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16",
-        # "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
-        "pretrained_dir": "pretrainedVIM/vim_t_midclstok_ft_78p3acc.pth",
+        "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
+        # "pretrained_dir": "pretrainedVIM/vim_t_midclstok_ft_78p3acc.pth",
         # "net": VisionMambaHashing, "net_print": "ViM-S_16", "model_type": "ViM-S_16", "pretrained_dir": "pretrainedVIM/ViM-S_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-B_16", "model_type": "ViM-B_16", "pretrained_dir": "pretrainedVIM/ViM-B_16.npz",
 

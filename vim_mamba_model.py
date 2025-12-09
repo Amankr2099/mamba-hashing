@@ -4,13 +4,18 @@ import numpy as np
 import os
 import sys
 
-# Setup path to the Vim source code
+# Ensure this path points to where you have the 'vim' folder containing models_mamba.py
 VIM_SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'Vim', 'vim'))
+
 if VIM_SRC_DIR not in sys.path:
     sys.path.insert(0, VIM_SRC_DIR)
 
-from models_mamba import VisionMamba
+try:
+    from models_mamba import VisionMamba
+except ImportError:
+    print(f"Error: Could not import VisionMamba. Check if {VIM_SRC_DIR} is correct.")
 
+# Configuration mapping
 VIM_CONFIGS = {
     "ViM-T_16": {"embed_dim": 192, "depth": 24}, 
     "ViM-S_16": {"embed_dim": 384, "depth": 24}, 
@@ -27,76 +32,84 @@ class VisionMambaHashing(nn.Module):
         embed_dim = vim_config.get("embed_dim", 192)
         depth = vim_config.get("depth", 24)
 
-        # 1. Initialize VisionMamba backbone
-        # We set num_classes=0 to get the raw features without the original classifier
+        # Initialize VisionMamba
+        # NOTE: stride=16 is standard for pre-trained weights. 
+        # If you specifically have stride=8 weights, change this back to 8.
         self.model = VisionMamba(
             img_size=crop_size,
             patch_size=16, 
+            stride=8, 
             embed_dim=embed_dim,
             depth=depth,
             rms_norm=True, 
             residual_in_fp32=True, 
-            fused_add_norm=True, 
+            fused_add_norm=True,
             final_pool_type='mean', 
             if_abs_pos_embed=True, 
             bimamba_type="v2", 
             if_cls_token=True, 
             use_middle_cls_token=True,
-            num_classes=0 
+            num_classes=0  # No classification head needed in backbone
         )
         
-        # 2. Define the intermediate projection head separately
-        # This MUST be assigned to self.head so load_from can access it
+        # Intermediate projection layer (Embedding -> 1024)
+        # RENAMED from intermediate_head to head to match load_from method
         self.head = nn.Linear(embed_dim, 1024)
         
-        # Initialize weights for the new head
-        self._init_weights()
-        
-        # 3. Create the full hash layer using the head defined above
+        # Hash layer (1024 -> hash_bit)
         self.hash_layer = nn.Sequential(
             nn.Dropout(0.1),
-            self.head,              # Use the self.head we defined
+            self.head,
             nn.ReLU(inplace=True),
             nn.Linear(1024, hash_bit),
         )
         
         self.embed_dim = embed_dim
         self.zero_head = zero_head
+        self._init_weights()
 
     def _init_weights(self):
-        nn.init.kaiming_uniform_(self.head.weight, mode='fan_out')
-        nn.init.zeros_(self.head.bias)
+        """Initialize the hashing layers."""
+        for m in self.hash_layer.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, mode='fan_out')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        # VisionMamba forward_features returns the feature vector directly
-        # because of the pooling configuration in __init__
+        # VisionMamba forward_features returns shape (Batch, Embed_Dim) 
+        # because if_cls_token=True (it returns the CLS token)
         features = self.model.forward_features(x)
         
-        # Critical for high mAP: Normalize features before hashing
+        # L2 Normalize features before hashing head
+        # This is critical for achieving high mAP in hashing tasks
         features = nn.functional.normalize(features, p=2, dim=1)
         
+        # Apply hash layer
         logits = self.hash_layer(features)
         return logits
 
     def load_from(self, weights):
         """Load pretrained weights from .npz file"""
         print("Loading pretrained weights...")
+        # Debug: print first few keys to verify structure
+        # print(f"Weight file keys: {list(weights.keys())[:10]}")
         
         with torch.no_grad():
             # Reset head weights if zero_head is True
             if self.zero_head:
-                # This caused your error because self.head was missing
+                # This works now because self.head is defined in __init__
                 nn.init.kaiming_uniform_(self.head.weight, mode='fan_out')
                 nn.init.zeros_(self.head.bias)
                 print("Initialized hash layer head with random weights")
             
+            # Load ViM backbone weights
             try:
+                # Create state dict from numpy weights
                 state_dict = {}
                 for key in weights.keys():
-                    # Skip the 'head' from the pretrained weights (ImageNet classifier)
-                    # We are using our own 'head' (Projection layer)
                     if key.startswith('head'):
-                        continue
+                        continue  # Skip original classifier head from pretrained weights
                     
                     weight = weights[key]
                     if isinstance(weight, np.ndarray):
@@ -104,9 +117,12 @@ class VisionMambaHashing(nn.Module):
                     else:
                         state_dict[key] = weight
                 
-                # Load backbone weights
-                missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
-                print(f"Backbone weights loaded. Missing keys: {len(missing)}")
+                # Load into ViM model
+                missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
+                print(f"Loaded pretrained weights. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
+                
+                # 'head' related keys are expected to be missing from the backbone load
+                # as they are handled by self.head and self.hash_layer
                     
             except Exception as e:
                 print(f"Error loading pretrained weights: {e}")

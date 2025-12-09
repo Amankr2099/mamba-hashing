@@ -12,7 +12,9 @@ import numpy as np
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
 from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS # ADDED: ViM imports
 import random
+
 torch.multiprocessing.set_sharing_strategy('file_system')
+import gc
 
 def get_config():
     config = {
@@ -29,7 +31,7 @@ def get_config():
         "bit_list": [32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
-        "epoch": 150, "test_map": 30, "batch_size": 64, "resize_size": 256, "crop_size": 224,
+        "epoch": 150, "test_map": 30, "batch_size": 32, "resize_size": 256, "crop_size": 224,
         "info": "DSH", "alpha": 0.1,
     }
     config = config_dataset(config)
@@ -79,6 +81,11 @@ def train_val(config, bit):
     criterion = DSHLoss(config, bit)
 
     for epoch in range(start_epoch, config["epoch"]+1):
+
+        # --- FIX 3: Clear Cache before training loop ---
+        torch.cuda.empty_cache()
+        gc.collect()
+
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
         print("%s-%s[%2d/%2d][%s] bit:%d, dataset:%s, training...." % (
             config["info"], config["net_print"], epoch, config["epoch"], current_time, bit, config["dataset"]), end="")

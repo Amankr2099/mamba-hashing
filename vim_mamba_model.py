@@ -87,41 +87,79 @@ class VisionMambaHashing(nn.Module):
         logits = self.hash_layer(features)
         return logits
 
-    def load_from(self, weights_path):
-        """Load pretrained weights from .pth or .npz file"""
-        print(f"Loading pretrained weights from {weights_path}...")
+    # def load_from(self, weights_path):
+    #     """Load pretrained weights from .pth or .npz file"""
+    #     print(f"Loading pretrained weights from {weights_path}...")
         
-        if not os.path.exists(weights_path):
-            print(f"Warning: Pretrained file {weights_path} not found. Using random init.")
-            return
+    #     if not os.path.exists(weights_path):
+    #         print(f"Warning: Pretrained file {weights_path} not found. Using random init.")
+    #         return
 
-        if weights_path.endswith('.pth') or weights_path.endswith('.pt'):
-            # Standard PyTorch Checkpoint Loading
-            # FIXED: Added weights_only=False to resolve PyTorch 2.6+ UnpicklingError
-            checkpoint = torch.load(weights_path, map_location='cpu', weights_only=False)
+    #     if weights_path.endswith('.pth') or weights_path.endswith('.pt'):
+    #         # Standard PyTorch Checkpoint Loading
+    #         # FIXED: Added weights_only=False to resolve PyTorch 2.6+ UnpicklingError
+    #         checkpoint = torch.load(weights_path, map_location='cpu', weights_only=False)
             
-            state_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
+    #         state_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
             
-            # Filter out head keys if they exist in checkpoint
-            state_dict = {k: v for k, v in state_dict.items() if not k.startswith('head')}
+    #         # Filter out head keys if they exist in checkpoint
+    #         state_dict = {k: v for k, v in state_dict.items() if not k.startswith('head')}
             
-            missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
-            print(f"Loaded .pth weights. Missing: {len(missing)}, Unexpected: {len(unexpected)}")
-            if len(missing) > 0:
-                print(f"Missing keys (first 5): {missing[:5]}")
+    #         missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
+    #         print(f"Loaded .pth weights. Missing: {len(missing)}, Unexpected: {len(unexpected)}")
+    #         if len(missing) > 0:
+    #             print(f"Missing keys (first 5): {missing[:5]}")
                 
-        elif weights_path.endswith('.npz'):
-            # Legacy/JAX weight loading
-            weights = np.load(weights_path)
-            with torch.no_grad():
+    #     elif weights_path.endswith('.npz'):
+    #         # Legacy/JAX weight loading
+    #         weights = np.load(weights_path)
+    #         with torch.no_grad():
+    #             state_dict = {}
+    #             for key in weights.keys():
+    #                 if key.startswith('head'): continue
+    #                 val = weights[key]
+    #                 state_dict[key] = torch.from_numpy(val) if isinstance(val, np.ndarray) else val
+                
+    #             self.model.load_state_dict(state_dict, strict=False)
+    #             print("Loaded .npz weights.")
+    def load_from(self, weights):
+        """Load pretrained weights from .npz file"""
+        print("Loading pretrained weights...")
+        print(f"Weight file keys: {list(weights.keys())[:10]}")  # Debug
+        
+        with torch.no_grad():
+            # Reset head weights if zero_head is True
+            if self.zero_head:
+                nn.init.kaiming_uniform_(self.head.weight, mode='fan_out')
+                nn.init.zeros_(self.head.bias)
+                print("Initialized hash layer head with random weights")
+            
+            # Load ViM backbone weights
+            try:
+                # Create state dict from numpy weights
                 state_dict = {}
                 for key in weights.keys():
-                    if key.startswith('head'): continue
-                    val = weights[key]
-                    state_dict[key] = torch.from_numpy(val) if isinstance(val, np.ndarray) else val
+                    if key.startswith('head'):
+                        continue  # Skip original classifier head
+                    
+                    weight = weights[key]
+                    if isinstance(weight, np.ndarray):
+                        state_dict[key] = torch.from_numpy(weight)
+                    else:
+                        state_dict[key] = weight
                 
-                self.model.load_state_dict(state_dict, strict=False)
-                print("Loaded .npz weights.")
+                # Load into ViM model
+                missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
+                print(f"Loaded pretrained weights. Missing keys: {len(missing_keys)}, Unexpected keys: {len(unexpected_keys)}")
+                
+                if len(missing_keys) > 0:
+                    print(f"Missing keys sample: {missing_keys[:5]}")
+                    
+            except Exception as e:
+                print(f"Error loading pretrained weights: {e}")
+                import traceback
+                traceback.print_exc()
+                print("Proceeding with random initialization...")
 
 
 

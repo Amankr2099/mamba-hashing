@@ -1,6 +1,6 @@
-# VTS (DSH with ViT Backbone - ICME 2022)
+# VTS (IDHN with ViT Backbone - ICME 2022)
 # paper [Vision Transformer Hashing for Image Retrieval, ICME 2022](https://arxiv.org/pdf/2109.12564.pdf)
-# DSH basecode considered from https://github.com/swuxyj/DeepHash-pytorch
+# IDHN basecode considered from https://github.com/swuxyj/DeepHash-pytorch
 
 from utils.tools import *
 from network import *
@@ -10,7 +10,7 @@ import torch.optim as optim
 import time
 import numpy as np
 from TransformerModel.modeling import VisionTransformer, VIT_CONFIGS
-from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS # ADDED: ViM imports
+from vim_mamba_model import VisionMambaHashing, VIM_CONFIGS 
 import random
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -22,15 +22,19 @@ def get_config():
         #"dataset": "nuswide_21",
         # "dataset": "imagenet",
         
+        #"net": AlexNet, "net_print": "AlexNet",
+        #"net":ResNet, "net_print": "ResNet",
+
+        # --- ViM Configuration ---
         "net": VisionMambaHashing, "net_print": "ViM-T_16", "model_type": "ViM-T_16", "pretrained_dir": "pretrainedVIM/ViM-T_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-S_16", "model_type": "ViM-S_16", "pretrained_dir": "pretrainedVIM/ViM-S_16.npz",
         # "net": VisionMambaHashing, "net_print": "ViM-B_16", "model_type": "ViM-B_16", "pretrained_dir": "pretrainedVIM/ViM-B_16.npz",
- 
-        "bit_list": [32,16],
+        
+        "bit_list": [64,32,16],
         "optimizer": {"type": optim.Adam, "optim_params": {"lr": 1e-5}},
         "device": torch.device("cuda"), "save_path": "Checkpoints_Results",
         "epoch": 150, "test_map": 30, "batch_size": 32, "resize_size": 256, "crop_size": 224,
-        "info": "DSH", "alpha": 0.1,
+        "info": "IDHN", "alpha": 0.5, "gamma": 0.1, "lambda": 0.1,
     }
     config = config_dataset(config)
     return config
@@ -45,14 +49,17 @@ def train_val(config, bit):
     num_classes = config["n_class"]
     hash_bit = bit
     
+    # --- Model Initialization Logic ---
     if "ViT" in config["net_print"]:
         vit_config = VIT_CONFIGS[config["model_type"]]
         net = config["net"](vit_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
-    # ADDED: Logic for VisionMambaHashing
+    
+    # ADDED: Logic for VisionMambaHashing (from HashNet file)
     elif "ViM" in config["net_print"]:
         vim_config = VIM_CONFIGS[config["model_type"]] 
         net = config["net"](vim_config, config["crop_size"], zero_head=True, num_classes=num_classes, hash_bit=hash_bit).to(device)
     # END ADDED
+        
     else:
         net = config["net"](bit).to(device)
     
@@ -76,7 +83,9 @@ def train_val(config, bit):
             net.load_from(np.load(config["pretrained_dir"]))
     
     optimizer = config["optimizer"]["type"](net.parameters(), **(config["optimizer"]["optim_params"]))
-    criterion = DSHLoss(config, bit)
+    
+    # IDHN uses IDHNLoss, unlike HashNet
+    criterion = IDHNLoss(config, bit)
 
     for epoch in range(start_epoch, config["epoch"]+1):
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
@@ -130,7 +139,7 @@ def train_val(config, bit):
             f.write('Test | Epoch %d | MAP: %.3f | Best MAP: %.3f\n'
                 % (epoch, mAP, Best_mAP))
             print(config)
-            
+        
             state = {
                 'net': net.state_dict(),
                 'Best_mAP': Best_mAP,
@@ -140,32 +149,32 @@ def train_val(config, bit):
     f.close()
 
 
-class DSHLoss(torch.nn.Module):
+class IDHNLoss(torch.nn.Module):
     def __init__(self, config, bit):
-        super(DSHLoss, self).__init__()
-        self.m = 2 * bit
+        super(IDHNLoss, self).__init__()
+        self.q = bit
         self.U = torch.zeros(config["num_train"], bit).float().to(config["device"])
         self.Y = torch.zeros(config["num_train"], config["n_class"]).float().to(config["device"])
 
     def forward(self, u, y, ind, config):
+        u = u / (u.abs() + 1)
         self.U[ind, :] = u.data
         self.Y[ind, :] = y.float()
 
-        dist = (u.unsqueeze(1) - self.U.unsqueeze(0)).pow(2).sum(dim=2)
-        y = (y @ self.Y.t() == 0).float()
+        s = y @ self.Y.t()
+        norm = y.pow(2).sum(dim=1, keepdim=True).pow(0.5) @ self.Y.pow(2).sum(dim=1, keepdim=True).pow(0.5).t()
+        s = s / (norm + 0.00001)
 
-        loss = (1 - y) / 2 * dist + y / 2 * (self.m - dist).clamp(min=0)
-        loss1 = loss.mean()
-        # The penalty term in DSH is often |u^2 - 1|, which is similar to the quantization loss (1 - |u|) used in the original HashNet paper, 
-        # but the DSH basecode you provided uses a loss term which can be simplified as just the magnitude of the difference from 1. 
-        # The basecode provided in the prompt uses: config["alpha"] * (1 - u.sign()).abs().mean(). This is unusual for DSH; a common DSH loss 
-        # includes a quantization term like (u.abs() - 1)^2 or similar. 
-        # The HashNet code used config["alpha"] * (1 - u.sign()).abs().mean(). Since you want to match the *HashNet* structure, 
-        # I'll keep the DSH basecode's loss: config["alpha"] * (1 - u.sign()).abs().mean()
-        loss2 = config["alpha"] * (1 - u.sign()).abs().mean() 
-        # Note: If the intention was to use a *standard* DSH quantization loss, it would typically be a simplified version of:
-        # loss2 = config["alpha"] * (u.abs() - 1).pow(2).mean() 
-        # But I'm adhering to the basecode provided in the DSH loss.
+        M = (s > 0.99).float() + (s < 0.01).float()
+
+        inner_product = config["alpha"] * u @ self.U.t()
+
+        log_loss = torch.log(1 + torch.exp(-inner_product.abs())) + inner_product.clamp(min=0) - s * inner_product
+
+        mse_loss = (inner_product + self.q - 2 * s * self.q).pow(2)
+
+        loss1 = (M * log_loss + config["gamma"] * (1 - M) * mse_loss).mean()
+        loss2 = config["lambda"] * (u.abs() - 1).abs().mean()
 
         return loss1 + loss2
 
